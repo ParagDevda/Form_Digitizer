@@ -108,17 +108,19 @@ def render_pdf(path: Path, output_dir: Path, dpi: int = 180, max_pages: int = 10
 
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
-        document = fitz.open(path)
-        if document.page_count == 0 or document.page_count > max_pages:
-            raise ValueError(f"PDF page count must be between 1 and {max_pages}")
-        scale = dpi / 72
-        outputs = []
-        for index, page in enumerate(document):
-            pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
-            target = output_dir / f"page-{index + 1:03d}.png"
-            pixmap.save(target)
-            outputs.append(target)
-        document.close()
-        return outputs
+        with fitz.open(path) as document:
+            if document.page_count == 0 or document.page_count > max_pages:
+                raise ValueError(f"PDF page count must be between 1 and {max_pages}")
+            scale = dpi / 72
+            outputs = []
+            for index, page in enumerate(document):
+                pixel_width, pixel_height = page.rect.width * scale, page.rect.height * scale
+                if pixel_width > 7000 or pixel_height > 7000 or pixel_width * pixel_height > 40_000_000:
+                    raise ValueError("PDF page dimensions exceed the supported processing limit")
+                pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+                target = output_dir / f"page-{index + 1:03d}.png"
+                pixmap.save(target)
+                outputs.append(target)
+            return outputs
     except (fitz.FileDataError, RuntimeError) as exc:
         raise ValueError(f"Cannot read PDF file: {path.name}") from exc

@@ -48,6 +48,21 @@ class QuestionUpdate(BaseModel):
     region_width: float | None = Field(default=None, gt=0, le=1)
     region_height: float | None = Field(default=None, gt=0, le=1)
 
+    @model_validator(mode="after")
+    def validate_region_update(self):
+        region_fields = {"region_x", "region_y", "region_width", "region_height"}
+        if self.model_fields_set & region_fields:
+            if not region_fields.issubset(self.model_fields_set):
+                raise ValueError("Supply or clear all four region coordinates together")
+            coords = (self.region_x, self.region_y, self.region_width, self.region_height)
+            if any(value is not None for value in coords) and any(value is None for value in coords):
+                raise ValueError("All four region coordinates must be supplied together")
+            if self.region_x is not None and self.region_x + self.region_width > 1:
+                raise ValueError("Region extends past the right edge")
+            if self.region_y is not None and self.region_y + self.region_height > 1:
+                raise ValueError("Region extends past the bottom edge")
+        return self
+
 
 class QuestionRead(QuestionInput):
     model_config = ConfigDict(from_attributes=True)

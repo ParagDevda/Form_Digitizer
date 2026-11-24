@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import PROJECT_ROOT, SessionLocal
-from app.models import FormTemplate, Question, TemplateSample
+from app.models import Answer, Batch, FormTemplate, Question, TemplateSample
 from app.schemas import QuestionCreate, QuestionRead, QuestionUpdate, TemplateCreate, TemplateRead, TemplateUpdate
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
@@ -28,16 +28,18 @@ def get_db():
 
 
 @router.post("/{template_id}/sample", status_code=status.HTTP_201_CREATED)
-async def upload_template_sample(template_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_template_sample(template_id: str, file: UploadFile = File(...), page_number: int = 1, db: Session = Depends(get_db)):
     template = db.get(FormTemplate, template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+    if page_number < 1 or page_number > template.page_count:
+        raise HTTPException(status_code=422, detail="Sample page must be within the template page count")
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in SAMPLE_SUFFIXES:
         raise HTTPException(status_code=415, detail="Sample must be a JPG, PNG, or WEBP image")
     directory = PROJECT_ROOT / "local_data" / "templates" / template_id
     directory.mkdir(parents=True, exist_ok=True)
-    destination = directory / f"sample-{uuid4()}{suffix}"
+    destination = directory / f"sample-{page_number}-{uuid4()}{suffix}"
     size = 0
     try:
         with destination.open("wb") as output:
@@ -49,14 +51,14 @@ async def upload_template_sample(template_id: str, file: UploadFile = File(...),
         from PIL import Image
         with Image.open(destination) as image:
             image.verify()
-        old = db.get(TemplateSample, template_id)
+        old = db.get(TemplateSample, (template_id, page_number))
         if old:
             old_path = PROJECT_ROOT / old.stored_path
             old_path.unlink(missing_ok=True)
             old.stored_path = str(destination.relative_to(PROJECT_ROOT))
             old.original_filename = Path(file.filename or "sample").name[:240]
         else:
-            db.add(TemplateSample(template_id=template_id, stored_path=str(destination.relative_to(PROJECT_ROOT)), original_filename=Path(file.filename or "sample").name[:240]))
+            db.add(TemplateSample(template_id=template_id, page_number=page_number, stored_path=str(destination.relative_to(PROJECT_ROOT)), original_filename=Path(file.filename or "sample").name[:240]))
         db.commit()
         return {"template_id": template_id, "filename": Path(file.filename or "sample").name}
     except Exception:
@@ -67,8 +69,8 @@ async def upload_template_sample(template_id: str, file: UploadFile = File(...),
 
 
 @router.get("/{template_id}/sample")
-def get_template_sample(template_id: str, db: Session = Depends(get_db)):
-    sample = db.get(TemplateSample, template_id)
+def get_template_sample(template_id: str, page_number: int = 1, db: Session = Depends(get_db)):
+    sample = db.get(TemplateSample, (template_id, page_number))
     if not sample:
         raise HTTPException(status_code=404, detail="Template sample not uploaded")
     path = PROJECT_ROOT / sample.stored_path
@@ -106,15 +108,16 @@ def duplicate_template(template_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Template not found")
     duplicate = FormTemplate(id=str(uuid4()), name=f"Copy of {source.name}"[:160], description=source.description, version=source.version, page_count=source.page_count)
     duplicate.questions = [Question(question_number=q.question_number, question_text=q.question_text, answer_type=q.answer_type, is_required=q.is_required, display_order=q.display_order, page_number=q.page_number, region_x=q.region_x, region_y=q.region_y, region_width=q.region_width, region_height=q.region_height) for q in source.questions]
-    copied_sample = None
-    if source.sample:
-        source_path = PROJECT_ROOT / source.sample.stored_path
+    copies = []
+    for sample in source.samples:
+        source_path = PROJECT_ROOT / sample.stored_path
         if source_path.is_file():
             target_dir = PROJECT_ROOT / "local_data" / "templates" / duplicate.id
             target_dir.mkdir(parents=True, exist_ok=True)
-            copied_sample = target_dir / f"sample{source_path.suffix}"
+            copied_sample = target_dir / f"sample-{sample.page_number}{source_path.suffix}"
             shutil.copy2(source_path, copied_sample)
-            duplicate.sample = TemplateSample(template_id=duplicate.id, stored_path=str(copied_sample.relative_to(PROJECT_ROOT)), original_filename=source.sample.original_filename)
+            copies.append(TemplateSample(template_id=duplicate.id, page_number=sample.page_number, stored_path=str(copied_sample.relative_to(PROJECT_ROOT)), original_filename=sample.original_filename))
+    duplicate.samples = copies
     db.add(duplicate)
     db.commit()
     db.refresh(duplicate)
@@ -131,6 +134,8 @@ def update_template(template_id: str, payload: TemplateUpdate, db: Session = Dep
         highest_page = max((q.page_number for q in template.questions), default=1)
         if updates["page_count"] < highest_page:
             raise HTTPException(status_code=409, detail="Page count cannot be lower than a question's page number")
+        if any(sample.page_number > updates["page_count"] for sample in template.samples):
+            raise HTTPException(status_code=409, detail="Page count cannot be lower than an uploaded sample page")
     for key, value in updates.items():
         setattr(template, key, value)
     db.commit()
@@ -143,8 +148,15 @@ def delete_template(template_id: str, db: Session = Depends(get_db)):
     template = db.get(FormTemplate, template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+    if db.scalar(select(Batch.id).where(Batch.template_id == template_id).limit(1)):
+        raise HTTPException(status_code=409, detail="Template is linked to an existing batch and cannot be deleted")
+    template_dir = PROJECT_ROOT / "local_data" / "templates" / template_id
+    for sample in template.samples:
+        (PROJECT_ROOT / sample.stored_path).unlink(missing_ok=True)
     db.delete(template)
     db.commit()
+    if template_dir.exists() and not any(template_dir.iterdir()):
+        template_dir.rmdir()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -190,6 +202,8 @@ def delete_question(question_id: str, db: Session = Depends(get_db)):
     question = db.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    if db.scalar(select(Answer.id).where(Answer.question_id == question_id).limit(1)):
+        raise HTTPException(status_code=409, detail="Question has saved student answers and cannot be deleted")
     db.delete(question)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -46,6 +46,9 @@ def segment_lines(image_path: Path, output_dir: Path, min_height: int = 8, gap_t
 
     output_dir.mkdir(parents=True, exist_ok=True)
     if not spans:
+        ink_pixels = int(np.count_nonzero(ink))
+        if ink_pixels < max(8, int(image.shape[0] * image.shape[1] * 0.0001)):
+            return []
         target = output_dir / "line-001.png"
         if not cv2.imwrite(str(target), image):
             raise OSError(f"Could not write line crop: {target}")

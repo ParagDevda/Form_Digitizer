@@ -13,12 +13,19 @@ class Base(DeclarativeBase):
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "local_data" / "database"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-DATABASE_URL = f"sqlite:///{(DATA_DIR / 'student_form_digitizer.db').as_posix()}"
+DATABASE_PATH = DATA_DIR / "student_form_digitizer.db"
+DATABASE_URL = f"sqlite:///{DATABASE_PATH.as_posix()}"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def initialize_database() -> None:
-    """Create the local SQLite database and any registered tables."""
-    Base.metadata.create_all(bind=engine)
+    """Apply checked-in Alembic migrations to the local SQLite database."""
+    from alembic import command
+    from alembic.config import Config
+
+    config = Config(str(PROJECT_ROOT / "backend" / "alembic.ini"))
+    config.set_main_option("script_location", str(PROJECT_ROOT / "backend" / "migrations"))
+    config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
+    command.upgrade(config, "head")
