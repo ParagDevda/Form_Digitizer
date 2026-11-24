@@ -28,6 +28,7 @@ def get_provider() -> TrOCRProvider:
 
 
 def refresh_batch_counts(db, batch_id: str) -> None:
+    db.flush()
     batch = db.get(Batch, batch_id)
     if not batch:
         return
@@ -122,6 +123,7 @@ def process_document(document_id: str, provider: TrOCRProvider | None = None) ->
             document.error_message = str(exc)[:1000]
             for answer in record.answers:
                 answer.verification_status = "recognition_failed"
+        refresh_batch_counts(db, document.batch_id)
         db.commit()
 
 

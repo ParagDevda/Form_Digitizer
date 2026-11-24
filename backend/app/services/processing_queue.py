@@ -8,7 +8,7 @@ from sqlalchemy import select, update
 
 from app.database import SessionLocal
 from app.models import Document
-from app.services.document_processing import process_batch
+from app.services.document_processing import process_batch, refresh_batch_counts
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,10 @@ class ProcessingQueue:
                 process_batch(batch_id)
             except Exception:
                 logger.exception("Unhandled batch worker failure for %s", batch_id)
-                with SessionLocal.begin() as db:
+                with SessionLocal() as db:
                     db.execute(update(Document).where(Document.batch_id == batch_id, Document.status.in_(["processing", "queued"])).values(status="failed", error_message="The batch worker stopped unexpectedly. Retry this batch."))
+                    refresh_batch_counts(db, batch_id)
+                    db.commit()
             finally:
                 with self._lock:
                     with SessionLocal() as db:
