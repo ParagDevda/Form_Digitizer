@@ -1,0 +1,3 @@
+-r requirements-ocr-hf.txt
+datasets==3.6.0
+psutil==7.0.0

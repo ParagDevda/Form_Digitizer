@@ -1,0 +1,3 @@
+# Install after requirements-ocr.txt with the normal package index.
+transformers==4.52.4
+huggingface-hub[hf_xet]==0.32.4
