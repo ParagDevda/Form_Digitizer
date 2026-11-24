@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import initialize_database
+from app import models  # noqa: F401 - register SQLAlchemy tables before initialization
+from app.api.templates import router as templates_router
 
 
 @asynccontextmanager
@@ -28,6 +30,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(templates_router)
 
 
 @app.get("/api/health")

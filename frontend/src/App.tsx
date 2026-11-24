@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Templates from './pages/Templates'
 import './App.css'
 
 type Health = { status: string; service: string }
@@ -6,6 +7,7 @@ type Health = { status: string; service: string }
 function App() {
   const [health, setHealth] = useState<Health | null>(null)
   const [error, setError] = useState('')
+  const [page, setPage] = useState<'dashboard' | 'templates'>('dashboard')
 
   useEffect(() => {
     fetch('/api/health')
@@ -23,8 +25,8 @@ function App() {
         <div className="brand-mark">SF</div>
         <div className="brand-copy"><strong>Student Forms</strong><span>Digitizer</span></div>
         <div className="nav-label">WORKSPACE</div>
-        <a className="nav-item active" href="#dashboard"><span>▦</span> Dashboard</a>
-        <a className="nav-item disabled" href="#templates"><span>▤</span> Form templates</a>
+        <button className={`nav-item ${page === 'dashboard' ? 'active' : ''}`} onClick={() => setPage('dashboard')}><span>▦</span> Dashboard</button>
+        <button className={`nav-item ${page === 'templates' ? 'active' : ''}`} onClick={() => setPage('templates')}><span>▤</span> Form templates</button>
         <a className="nav-item disabled" href="#upload"><span>⇧</span> Upload documents</a>
         <a className="nav-item disabled" href="#verification"><span>✓</span> Verification</a>
         <a className="nav-item disabled" href="#records"><span>☷</span> Student records</a>
@@ -34,6 +36,7 @@ function App() {
 
       <main className="main-content" id="dashboard">
         <header className="topbar"><span>Workspace <b>/</b> Dashboard</span><span className="local-badge"><i /> Running locally</span></header>
+        {page === 'templates' ? <Templates /> : <>
         <section className="welcome">
           <div><p className="eyebrow">STUDENT FORM DIGITIZER</p><h1>Good day.</h1><p className="subtitle">Your local workspace is ready to set up.</p></div>
           <div className="date-chip">PHASE 1 · FOUNDATION</div>
@@ -67,6 +70,7 @@ function App() {
           </article>
         </section>
         <footer>Student Form Digitizer <span>•</span> Local workspace <span>•</span> Phase 1</footer>
+        </>}
       </main>
     </div>
   )
