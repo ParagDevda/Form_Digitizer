@@ -21,6 +21,13 @@ def test_line_segmentation_and_preprocessing(tmp_path):
     assert crop_region(image, (.1, .1, .5, .5)).shape[:2] == (300, 400)
 
 
+def test_blank_answer_region_does_not_create_an_ocr_line(tmp_path):
+    blank = np.full((80, 500, 3), 255, dtype=np.uint8)
+    path = tmp_path / "blank.png"
+    cv2.imwrite(str(path), blank)
+    assert segment_lines(path, tmp_path / "blank-crops") == []
+
+
 def test_template_feature_alignment(tmp_path):
     template = np.full((900, 650, 3), 255, dtype=np.uint8)
     for y in range(100, 800, 90):

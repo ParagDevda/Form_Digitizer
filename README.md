@@ -41,7 +41,26 @@ Double-click `start_app.bat`. It starts FastAPI at <http://127.0.0.1:8000>, the 
 
 Run `stop_app.bat` to stop only the processes started by the startup script. Logs are written under `.run-state/logs/` while the app runs.
 
-For development, activate `.venv`, then run `python backend\run.py` and, in another terminal, `cd frontend; npm run dev`.
+If the default ports are already in use, start with alternate local ports from PowerShell, for example `powershell -ExecutionPolicy Bypass -File scripts\start_app.ps1 -ApiPort 8002 -FrontendPort 5175`. The frontend proxy follows the selected API port. Stop those services with `scripts\stop_app.ps1`.
+
+The application workflow is: create a template, add questions, upload a blank sample for each page, and draw normalized answer regions; create a named batch and upload forms; start the batch for sequential local OCR; review every answer against the original page; then export all or verified records, optionally filtered by batch. Failed documents can be retried from the Upload page. Blank answer regions are not sent to OCR, and failed alignment is reported instead of silently reading the wrong area.
+
+For manual development startup, open two PowerShell terminals from the project folder.
+
+Terminal 1, backend API:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+Terminal 2, frontend:
+
+```powershell
+cd frontend
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+Open <http://localhost:5173>; stop each development server with `Ctrl+C`. The API docs are at <http://127.0.0.1:8000/docs>. `start_app.bat` and `stop_app.bat` are the one-click alternatives.
 
 ## Data locations
 
@@ -60,6 +79,8 @@ SQLite schema changes are managed with Alembic. To apply pending migrations manu
 
 Back up the database and local data folders together. These paths are excluded from Git.
 
+The Settings page creates a ZIP backup containing a consistent SQLite snapshot plus originals, template samples, processed files, and exports. The app stores a local copy under `local_data/backups/` and downloads the archive through the browser. The model weights and benchmark dataset are stored separately and are not included.
+
 ## Tests
 
 ```powershell
@@ -67,6 +88,8 @@ Back up the database and local data folders together. These paths are excluded f
 cd frontend
 npm run build
 ```
+
+The model-backed document-processing integration test uses a generated form and a local provider; run it explicitly with `python -m pytest backend\tests -m integration -q` after the TrOCR weights are installed. The public IAM-line benchmark is the measured handwriting reference set; this workspace does not contain representative student form ground truth, so the benchmark does not predict accuracy on your particular forms. Every OCR result remains pending review until a person verifies it.
 
 ## OCR benchmark
 
