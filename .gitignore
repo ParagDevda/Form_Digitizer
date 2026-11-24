@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+
+# Local student data and model files
+local_data/**
+!local_data/.gitkeep
+backend/models/**
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
